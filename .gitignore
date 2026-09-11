@@ -1,0 +1,41 @@
+# Game data and local debugging material
+*.bin
+*.gen
+*.mdrom
+*.rom
+*.smd
+*.State
+*.state
+*.core
+*.extra
+*.sav
+*.srm
+/backups/
+/diagnostics/
+*.lnk
+*.log
+__pycache__/
+*.pyc
+.env
+.env.*
+
+# Compiled output
+*.o
+*.a
+*.dll
+*.exe
+*.so
+*.dylib
+*.dol
+*.pdb
+*.obj
+*.user
+/dist/
+
+# Local emulator profiles, screenshots and test reports
+/bizhawk/*.ini
+/bizhawk/*.png
+/bizhawk/*.json
+/bizhawk/*complete.txt
+/bizhawk/*verification.txt
+/bizhawk/play-bizhawk.ps1
