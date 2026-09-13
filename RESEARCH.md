@@ -342,3 +342,269 @@ outside the trigger band, and replays saves deterministically. Guard/death and
 native barrel/stone physics regression checks also pass.
 
 Window trigger follow-up: actual September 11 20:25 QuickSave1 has hidden type84 knife throwers at 8260/8326/8368, animation12320E. Prior hand fix only covered123D34 family. Added123200..123274 family (84/06) to targeting and its native FD30 horizontal range48, retaining64 for original hands. Reproduced no activation over600frames before fix; actual save now activates8326 above P2 within180frames with deterministic replay. verify_window_hands.py, verify_enemy_death.py, verify_object_physics.py pass. Installed updated core; restart emulator required.
+
+
+## September 13 checklist fixes
+
+- P2 hurt blinking now checks its own saved F0F2 timer at renderer entry. The
+  native check at 1ABA14 only applies to the first object. Debug protection
+  still suppresses blinking for both players.
+- Sprite drawing visits objects 0,31,1..30 using the native DBRA counter at
+  1ABA20. Both players precede world sprites in the SAT priority chain. Changing
+  only the loop epilogue is unsafe: native skip branches bypass that hook.
+  Simulation order and VRAM allocation remain unchanged.
+- Abu bonus stages 2/6 use a separate P2 tile remap, darkening tan inks 1..6 by
+  one step and preserving the other inks. Tiles still originate from ROM, so
+  loading old recolored saves cannot compound the darkening.
+- Camera separation and midpoint rules only apply when both players are alive.
+  If P1 dies, native scrolling temporarily receives P2's coordinates, then
+  restores P1's real coordinates. Dead P2 imposes no limits on P1. Both dead
+  freezes scroll until existing team recovery. Paid respawn timing is unchanged.
+- Rug Ride F10B is a shared scripted duck cue. P2's free-ride animation loop
+  122336 is normalized to the stage loop 122350, which branches into ducking.
+- Genie slot-machine input reads at 1B190E and 1B1954 include A/B/C from both
+  frontend pads. The native debounce, token deduction, timing and rewards run
+  unchanged. This works outside the gameplay-ready state.
+- Trampoline families 01,4E,4F and 65/66 keep shared recoil animations but use
+  individual cooldowns. Hidden type84 recoil sprites remain collision candidates
+  for the other player and dispatch the original launch routine. Native observed
+  recoil durations are 23/19/35/19 frames from a forced animation start; per-player
+  counters initialize to 24/20/36/20 and decrement at paired update completion.
+  Saved metadata at player RAM 0200..02FF records cooldown, object position and
+  family by slot, and resets on stage creation. It is outside installed ranges,
+  so state version/size stays unchanged. Both player orders, immediate same-player
+  blocking, expiration, all four spring families and saved replay are tested.
+
+Verification: tools/verify_a_fixes.py covers all seven reported items (Genie
+fixture is local diagnostics/task-a-slot.core/.extra). Enemy/death, all 13 stage
+loads, outfit materials, object physics, death options and teleport checks pass.
+The tests do not replace a full normal two-player campaign playthrough.
+
+## Escape slope separation regression
+
+Reproduced from a fresh stage 7 load with either player holding Right while the
+other stays on the starting ledge at world (55,391). Once the leader descends
+more than 120 pixels, the previous camera hook classified the idle player's
+zero vertical velocity as ascent and assigned Y=partnerY-120. This forced the
+idle player through the solid slope. It was a position clamp, not corrupted tiles.
+
+The vertical limit now requires an airborne, rising player (negative velocity,
+F0BE set and F0C0 clear). Its correction cannot move the player below their
+previous world Y, so attempting a jump when already beyond the separation band
+also cannot snap through the ledge. The change applies to normal platform stages.
+
+verify_escape_separation.py verifies both leaders, 100-frame idle ground
+stability, jumping while separated, and deterministic save replay. The seven
+September 13 checklist checks, death policies, and all 13 stage load checks pass.
+Updated standalone build and installed BizHawk core; restart required.
+
+
+## Rope, look-up, optional flute, palace passage and scripted carpet fixes
+
+- Horizontal-rope animation at 1A99F0 uses F16A as a 40-step phase counter.
+  Capture/install it per player so two moving climbers do not advance one phase
+  twice. Tests compare each player's solo and simultaneous timelines; the initial
+  idle poses can differ but movement phases match.
+- Either player's settled F0DF look-up pose can raise the native camera target
+  7E00. The primary pass temporarily uses the larger requested target, preserving
+  P1's own target in snapshot metadata 2..4 and restoring it at 1A8CA2. Releasing
+  P2 Up therefore cannot latch P1 into permanent look-up scrolling.
+- Rooftops optional flute 4B (native spawner 1B70B0, pickup 1AF060) sets shared
+  F116. This differs from the five ordinary flute rope flags F126..12A. The native
+  snake movement at 12070E now sees P2's pickup even when P1 rides. Its tested
+  branch advances to 1207A0 with the flute versus 12073C without it.
+- Palace QS1 had P2 F11C=FF but P1 F11C=0, plus the stationary type5F carpet
+  from map tag82 still covering the passage at (2925,596). Share the key flag
+  in stage10 and merge either context when restoring old saves. Native spawner
+  1B68D6 suppresses that carpet after the key, but only on map streaming. At
+  animation entry, an already-loaded type5F/tag82 instance is retired with native
+  1ABE6E cleanup and returns to the normal 1AC846 loop. No terrain is fabricated
+  or removed. The reported save now lets P2 descend, and native key pickups by
+  either player also retire the carpet while the camera remains nearby.
+- Scripted carpets use shared destination F094/F096. Their invisible type84
+  route controllers now get the rider's player context when reciprocally linked
+  to native carpet types 5E/60/61. Prefer a player already standing on the carpet
+  over another nearby player. The same native paired carpet/controller scripts
+  follow identical paths for P1/P2 boarding and keep the rider aboard.
+
+Verification: tools/verify_rope_camera_scripts.py covers all five issues, native
+pickups, release of look-up, and deterministic carpet/passage save replay. It
+requires the local blocked-cage.core/.extra fixture extracted from the user's
+QS1; those files and screenshots are excluded from Git. verify_a_fixes,
+verify_escape_separation, verify_campaign, verify_object_physics and
+verify_death_options also pass. This is targeted native-script testing and stage
+loading, not a complete campaign playthrough.
+
+
+## P2 reversed outfit colors
+
+P2 now uses native violet ink 11 for classified trouser interiors and white
+ink 14 for the original vest ink 11. Dark trouser borders retain ink 15.
+Skin, sword highlights, and the bonus-stage Abu remap are preserved.
+verify_outfit_materials.py passes across 30 animation frames and 61,279
+skin/vest pixels, including the previously reported isolated walking folds.
+
+
+## Player pieces missing behind lamp meters
+
+Reproduced both players overlapping the top HUD. Two native full lamp meters
+can exceed the Genesis 20-sprite scanline limit even before player sprites;
+combined player poses can also exceed the 320-pixel sprite budget. The Mode 5
+renderer now uses its existing expanded 80-sprite/2560-pixel capacity while
+co-op is enabled and ready. Outside active co-op it retains configured limits.
+Native HUD art, sprite order, masking, palette and health animation are unchanged.
+Simply combining adjacent smoke sprites was insufficient because it did not
+resolve pixel-budget overflow; no such HUD compaction remains in the build.
+verify_lamp_sprites.py exercises top-HUD overlap at health 1..8 and confirms
+that native limits are exceeded by the fixture, expanded capacity is sufficient,
+and disabling co-op disables the override. Appearance and checklist tests pass.
+
+
+## P2 red and blue outfit
+
+Requested outfit now uses native red ink 8 for the classified trouser regions
+and blue ink 9 for the original vest ink. Skin, hair, sword highlights and the
+bonus-stage Abu remap are unchanged. Appearance verification retains the
+walking-fold and skin consistency checks with the updated clothing colors.
+
+
+## Expanded sprite-art audit and material fixes
+
+The red/blue remap flattened cream fold shadows into the trouser base color.
+Ink2 fold shadows and ink13 cloth borders now use dark red ink7, while the red
+interior remains ink8. Small cream-edged white fabric components (at least four
+white pixels, two warm pixels and a 2x2 interior) count as cloth even when they
+fall below the old 16-white-pixel threshold. This catches bent-leg fragments.
+
+Native purple ink11 is shared by vest panels and thin sword edges. Connected
+regions with a broad interior or a skin neighbor map to blue; isolated thin
+edges retain the native purple shadow. This avoids applying the vest color to
+all sword details. The Genie's portion of composite descriptor1E8034 preserves
+its original inks. Pure teleport-effect descriptors1ED230..1ED2E4 bypass clothing
+recoloring; the previous broad-white rule had turned the final flash red.
+Exposed knees remain skin, as in the original art.
+
+`tools/audit_sprite_art.py` decodes 279 Aladdin descriptors and body fragments
+from1E8034 through1EE088. Side-by-side native/P2 contact sheets were inspected.
+It checks560,064 pixels for preserved transparency, allocation guards, and
+repeatable reconstruction after overwriting the destination with stale tiles.
+Pure teleport frames additionally must match native ROM bytes exactly. The
+probe-only recolor export exercises the production path, including its cache.
+The generated sheets and JSON report are local diagnostics, excluded from Git.
+
+`tools/verify_world_sprite_tiles.py` runs240 frames in each of13 stages and
+compares stable P1/world uploads against original ROM graphics:15,400 complete
+sprite comparisons passed. This covers sampled native world objects, not every
+possible world-object animation or every path through the campaign.
+
+Also passed: outfit material checks, lamp scanline checks, checklist regressions,
+rope/camera/flute/palace/carpet checks, Escape separation, campaign stage loads,
+enemy/death, object physics, death policies, teleport effects, drowning,
+Desert no-clip, window hands, and Rooftops ropes. No full campaign playthrough
+or claim that all possible sprite bugs are eliminated.
+
+
+## Reported face shadows and trouser patches
+
+The previous broad audit verified uploads, transparency, and memory safety; it
+was not a semantic pixel oracle. The two supplied close-ups exposed mistakes it
+could not detect. Tiny purple components adjacent to skin were incorrectly
+classified as blue vest panels. Vest classification now requires either a broad
+interior or at least four connected pixels with three skin-adjacent edges.
+One- and three-pixel facial shadows retain their original dark ink.
+
+At the user's request, small warm islands enclosed inside trousers now become
+red cloth. Components must be disconnected from the transparent exterior,
+contain at most64 pixels, and touch fabric on at least4 edges. Large body regions
+and exposed limbs remain skin. Immediate cream rims of these filled islands are
+also red, so removing the yellow patch does not leave a dotted dark outline.
+This supersedes the earlier decision to preserve every enclosed knee patch.
+
+verify_reported_materials.py checks hand-labelled coordinates in1EC114 (standing)
+and1EC27C (apple toss), plus nearby face/hand/foot colors, and renders enlarged
+previews of six related poses. The existing broad material test now permits red
+inside formerly skin-colored trouser islands; the targeted landmarks ensure it
+is not accepting red on the face or exposed hands/feet. Re-ran the279-frame
+transparency, allocation-guard and stale-VRAM audit as well.
+
+
+## Idle apple and original fold comparison
+
+Cream ink1 trouser strokes previously mapped to the red base ink8, erasing
+fold contours. They now use dark red7, alongside the existing ink2 shadow
+mapping. Filled warm patches and their rims remain red as previously requested.
+The vest and facial-shadow classification is unchanged.
+
+Native red ink8 outside cloth remains red instead of mapping to skin ink4.
+The four pure idle-apple tiles at ROM AD9A0..ADA00 retain every original ink,
+including highlight ink4. Descriptor1EC5DC packs the descending apple into a
+body tile; preserve its small apple rectangle at x144..148,y93..97. The caught
+apple uses red8 while the surrounding hand retains P2's skin mapping.
+
+verify_idle_apple_folds.py checks all8 idle-apple poses and320 restored dark-red
+fold pixels. The102 face/trouser/limb landmarks,30-frame material check and
+279-frame transparency/VRAM/stale-tile audit also pass. A native/P2 comparison
+is saved locally at diagnostics/idle-apple-fold-comparison.png.
+
+
+## Darker blue vest and restored trouser patch
+
+P2 vest panels now use native blue ink10 instead of the lighter ink9. Facial
+shadows still retain ink11. At the user's request, the enclosed tan patch and
+its cream rim now retain their original ROM inks rather than being filled red.
+This uses the existing bounded patch mask, retaining red fold strokes elsewhere
+and preserving the idle apple fixes. The reported-pose tests now require native
+patch colors and the darker blue vest, alongside unchanged face/hand/foot checks.
+
+Patch restoration is limited to enclosed islands centered in the lower half
+of the detected trousers; upper waistband fold islands remain red. This avoids
+restoring the previously reported yellow waistband marks along with the knee.
+
+
+## Complete patch shape, warm fold leaks and narrow vest pieces
+
+The prior enclosed-island heuristic split the patch's cream interior from its
+tan border and missed warm fold chains connected to the waistband. Replace it
+with per-row fabric bounds, extended through contiguous native warm strokes.
+Warm colors inside that silhouette are fabric. Compact lower-trouser tan-pixel
+clusters define the patch; restore the full cream/tan row span around each
+cluster, including interior pixels, instead of only its seed colors. Warm
+strokes outside the patch use dark red, preserving the original fold geometry.
+
+Narrow purple regions can join nearby established vest panels only when they
+have no silver edge or dense skin/hair neighborhood. This recovery stays within
+two pixels and does not spread above the vest. Native torso pieces at7D780 and
+93880 have separately identified vest ink, so their thin front/back panels use
+blue10 without relying on a broad-area threshold. Head and sword shadows retain
+their existing protection; idle apple tiles still retain native colors.
+
+New verify_material_regions.py checks13 idle poses:247 complete patch pixels,
+430 warm fold pixels above the patch, and87 narrow vest pixels. These checks
+include the patch interior missed by the earlier landmark tests. Also pass:
+reported material landmarks,30-frame material checks, all8 idle apple poses,
+279-frame transparency/VRAM/stale-tile audit, teleport effects and checklist
+regressions. Contact sheets remain a visual aid, not a complete semantic oracle
+for every possible pose; the explicit regression claims apply to these fixtures.
+
+Coal flames (2026-09-13): the native 8C -> 7B delayed flame was shared,
+so a runner could reach their partner's armed flame even while moving. Track
+its triggering player in snapshot metadata 0300..031F, clear ownership when
+native 1AE30A initializes a reused slot, and stamp it at coal spawn 1B535A.
+At 1B5332, search for this player's pending flame instead of the game's single
+shared pending 8C. At 1AE9D4, only that player receives its damage. Original
+arming, animation, health loss, and stationary-coal behavior remain native.
+Metadata is cleared on stage initialization and uses the existing save layout.
+verify_coals.py covers either runner leading, both stopping, either stopping
+alone, and save/replay. Vertical-rope descriptors 1E6AE6..1E6D50 are now included
+in the sprite-art audit; the reported stray blue pixel still needs an exact
+pose/location before a further recolor change.
+
+Vertical-rope white fragments (2026-09-13): the supplied climbing screenshot
+identified isolated cream/white cuff and fold pixels missed by connected-region
+classification. For the eight native vertical-rope descriptors 1E6AE6..1E6D50,
+map native inks 1/2/14 below the waist (Y>=114) to the trouser ramp. Native skin
+uses 3..7 here, and the hanging sword uses 12/13. Comparing the new core with
+the installed predecessor showed exactly ten changed pixels in five poses;
+every other pixel in all eight poses was identical. verify_climbing_cloth.py
+checks 2,114 fabric pixels, 479 retained steel pixels and all ten landmarks.
+Coals, idle material regions, bending patches and the 287-frame audit pass.

@@ -2,8 +2,11 @@
 exec(compile(open(__file__.replace('verify_enemy_death.py','verify_campaign.py')).read().split('for level,name in enumerate(names):')[0],__file__,'exec'))
 c.al_probe_player.restype=C.POINTER(C.c_ubyte)
 c.al_coop_enable(0);p.restore(seed);c.al_coop_enable(1);step(155,one=1<<7,two=1<<7);step(15)
-base=save();guard=0x800e
-assert p.ram()[guard]==31
+base=save()
+# Personal coal flames can occupy different slots before the guard spawns.
+guards=[a for a in range(0x7e82,0x863e,0x42) if p.ram()[a]==31]
+assert len(guards)==1,guards
+guard=guards[0]
 
 def position(who,x):
  cx=int.from_bytes(p.ram()[0x7df6:0x7df8],'big')

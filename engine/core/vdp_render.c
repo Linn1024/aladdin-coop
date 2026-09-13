@@ -3812,13 +3812,17 @@ void render_obj_m4(int line)
   }
 }
 
+/* Co-op adds a second player and lamp HUD; retain complete sprites when
+ * these overlap. Other games and single-player retain the configured limits. */
+extern unsigned al_coop_sprite_budget(void);
+
 void render_obj_m5(int line)
 {
   int i, column;
   int xpos, width;
   int pixelcount = 0;
   int masked = 0;
-  int max_pixels = MODE5_MAX_SPRITE_PIXELS;
+  int max_pixels = al_coop_sprite_budget() ? MAX_SPRITES_PER_LINE * 32 : MODE5_MAX_SPRITE_PIXELS;
 
   uint8 *src, *s, *lb;
   uint32 temp, v_line;
@@ -3928,7 +3932,7 @@ void render_obj_m5_ste(int line)
   int xpos, width;
   int pixelcount = 0;
   int masked = 0;
-  int max_pixels = MODE5_MAX_SPRITE_PIXELS;
+  int max_pixels = al_coop_sprite_budget() ? MAX_SPRITES_PER_LINE * 32 : MODE5_MAX_SPRITE_PIXELS;
 
   uint8 *src, *s, *lb;
   uint32 temp, v_line;
@@ -4046,7 +4050,7 @@ void render_obj_m5_im2(int line)
   int xpos, width;
   int pixelcount = 0;
   int masked = 0;
-  int max_pixels = MODE5_MAX_SPRITE_PIXELS;
+  int max_pixels = al_coop_sprite_budget() ? MAX_SPRITES_PER_LINE * 32 : MODE5_MAX_SPRITE_PIXELS;
 
   uint8 *src, *s, *lb;
   uint32 temp, v_line;
@@ -4155,7 +4159,7 @@ void render_obj_m5_im2_ste(int line)
   int xpos, width;
   int pixelcount = 0;
   int masked = 0;
-  int max_pixels = MODE5_MAX_SPRITE_PIXELS;
+  int max_pixels = al_coop_sprite_budget() ? MAX_SPRITES_PER_LINE * 32 : MODE5_MAX_SPRITE_PIXELS;
 
   uint8 *src, *s, *lb;
   uint32 temp, v_line;
@@ -4470,7 +4474,7 @@ void parse_satb_m5(int line)
   int count = 0;
 
   /* max. number of rendered sprites (16 or 20 sprites per line by default) */
-  int max = MODE5_MAX_SPRITES_PER_LINE;
+  int max = al_coop_sprite_budget() ? MAX_SPRITES_PER_LINE : MODE5_MAX_SPRITES_PER_LINE;
 
   /* max. number of parsed sprites (64 or 80 sprites per line by default) */
   int total = max_sprite_pixels >> 2;
@@ -4558,7 +4562,7 @@ void parse_satb_m5_im2(int line)
   int count = 0;
 
   /* max. number of rendered sprites (16 or 20 sprites per line by default) */
-  int max = MODE5_MAX_SPRITES_PER_LINE;
+  int max = al_coop_sprite_budget() ? MAX_SPRITES_PER_LINE : MODE5_MAX_SPRITES_PER_LINE;
 
   /* max. number of parsed sprites (64 or 80 sprites per line by default) */
   int total = max_sprite_pixels >> 2;

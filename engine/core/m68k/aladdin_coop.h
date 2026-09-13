@@ -16,12 +16,14 @@ static unsigned al_buttons[2], al_previous[2], al_ticks, al_rejoins[2], al_resta
 static unsigned al_regs[16];
 static unsigned al_hud[4]; /* second pass, sprite start, original HP, animation cursor */
 static unsigned al_debug_flags, al_debug_pending;
+/* Two players and two lamp meters exceed both native scanline budgets. */
+__declspec(dllexport) unsigned al_coop_sprite_budget(void) {return al_enabled && al_ready;}
 typedef struct { unsigned char ram[65536]; int camera_x, camera_y; } al_player;
 static al_player al_players[2];
 __declspec(dllexport) unsigned char *al_probe_player(unsigned p) {return p<2?al_players[p].ram:0;}
 static const unsigned al_ranges[][2] = {
   {0x7dfa,12}, {0x7e40,0x42}, {0xeffa,1}, {0xeffc,12},
-  {0xf07c,0x36}, {0xf0b6,0x48}, {0xf100,0x40}, {0xf167,1}
+  {0xf07c,0x36}, {0xf0b6,0x48}, {0xf100,0x40}, {0xf167,1}, {0xf16a,1}
 };
 static unsigned al_r8(unsigned a) { return work_ram[a^1]; }
 static unsigned al_r16(unsigned a) { return (al_r8(a)<<8)|al_r8(a+1); }
@@ -54,21 +56,22 @@ static void al_reclaim_iago_tiles(void) {
 static unsigned al_rom8(unsigned a) {return m68k_read_pcrelative_8(a);}
 static unsigned al_rom16(unsigned a) {return (al_rom8(a)<<8)|al_rom8(a+1);}
 static void al_recolor_player_two(void) {
-  static unsigned cached_frame, cached_size;
-  static unsigned char tiles[4096], pixels[65536], region[65536];
+  static unsigned cached_frame, cached_size, cached_abu;
+  static unsigned char tiles[4096], props[4096], pixels[65536], region[65536];
   static unsigned short positions[8192], queue[65536];
-  static const unsigned char cloth[16]={0,4,5,4,5,5,6,7,4,9,10,15,6,7,5,15};
+  static const unsigned char cloth[16]={0,7,7,7,7,5,6,7,4,9,10,15,15,7,8,15};
   unsigned frame=al_r32(AL_SLOT+0x14),start=al_r32(AL_SLOT+0x2e);
   unsigned bytes=(al_r8(AL_SLOT+0x29)+1)*128,i,j,n,used=0;
+  unsigned abu=al_r8(0x7e26)==2 || al_r8(0x7e26)==6;
   if(al_r8(AL_SLOT)!=0x83 || !start || start>=65536 || bytes>65536-start ||
      bytes>sizeof(tiles) || frame<0x10000 || frame>0x1ffff0)return;
   al_w16(AL_SLOT+0x1e,(al_r16(AL_SLOT+0x1e)&~0x6000)|0x6000);
-  if(frame!=cached_frame || bytes!=cached_size) {
+  if(frame!=cached_frame || bytes!=cached_size || abu!=cached_abu) {
     cached_frame=0;cached_size=0;
     n=al_rom16(frame)+1;
     if(n>32 || frame+6+n*12>0x200000)return;
     memset(pixels,0,sizeof(pixels));memset(region,0,sizeof(region));
-    memset(tiles,0,sizeof(tiles));
+    memset(tiles,0,sizeof(tiles));memset(props,0,sizeof(props));
     for(i=0;i<n;i++) {
       unsigned a=frame+6+i*12,shape=al_rom16(a),w,h,size,source,x,y;
       if(shape>0xfff6)return;
@@ -76,7 +79,16 @@ static void al_recolor_player_two(void) {
       source=(al_rom8(a+5)|(al_rom8(a+7)<<8)|((al_rom8(a+9)&127)<<16))*2;
       if(!w || !h || w>32 || h>32 || (w&7) || (h&7) ||
          size!=w*h/2 || used+size>bytes || source+size>0x200000)return;
-      for(j=0;j<size;j++)tiles[used+j]=al_rom8(source+j);
+      for(j=0;j<size;j++) {
+        tiles[used+j]=al_rom8(source+j);
+        /* The idle apple has four independent 8x8 artwork tiles. */
+        if(size==32 && source>=0xad9a0 && source<=0xada00)props[used+j]=1;
+        /* Separate torso pieces in the idle cycle contain vest, not face. */
+        if(source==0x7d780 || source==0x93880)props[used+j]=2;
+        /* Apple-toss torso: only the first 8x16 column is vest. The
+         * remaining columns include a purple hand shadow to preserve. */
+        if(source==0xfb2a0 && j<64)props[used+j]=2;
+      }
       for(x=0;x<w;x++)for(y=0;y<h;y++) {
         unsigned offset=used+((x/8)*(h/8)+y/8)*32+(y&7)*4+(x&7)/2;
         unsigned pos=((al_rom8(a+3)+y)&255)*256+((al_rom8(a+2)+x)&255);
@@ -90,7 +102,7 @@ static void al_recolor_player_two(void) {
      * tiny facial highlights. Follow the cream/grey folds across tile seams. */
     for(i=0;i<65536;i++)if(!region[i] &&
         (pixels[i]==1 || pixels[i]==2 || pixels[i]==14)) {
-      unsigned head=0,tail=1,white=0,broad=0,k;
+      unsigned head=0,tail=1,white=0,warm=0,broad=0,k;
       queue[0]=i;region[i]=3;
       while(head<tail) {
         unsigned pos=queue[head++],neighbors[4]={pos-256,pos+256,pos-1,pos+1};
@@ -99,6 +111,7 @@ static void al_recolor_player_two(void) {
           if((pos&255)<255 && pos<65280 && pixels[pos+1]==14 &&
              pixels[pos+256]==14 && pixels[pos+257]==14)broad=1;
         }
+        if(pixels[pos]!=14)warm++;
         for(k=0;k<4;k++) {
           unsigned next=neighbors[k],ink;
           if(next>=65536 || (k==2 && !(pos&255)) || (k==3 && (pos&255)==255))continue;
@@ -108,7 +121,7 @@ static void al_recolor_player_two(void) {
           }
         }
       }
-      for(j=0;j<tail;j++)region[queue[j]]=(white>=16 && broad)?2:1;
+      for(j=0;j<tail;j++)region[queue[j]]=(broad && (white>=16 || (white>=4 && warm>=2)))?2:1;
     }
     /* Bent legs and overlapping swords split off small fabric fragments.
      * Recover cream-edged white fragments near the established trousers, even
@@ -142,8 +155,8 @@ static void al_recolor_player_two(void) {
     }
     /* Grey outline inks are also used by the sword and climbing details.
      * Only recolor the immediate cloth border; never flood through greys into
-     * another material. Tan knee patches are exposed skin, even when enclosed
-     * by trousers, and must use the same skin ramp as the face and hands. */
+     * another material. Exposed limbs retain skin colors; enclosed warm islands
+     * within trousers are handled separately below. */
     for(i=0;i<65536;i++)if(pixels[i]==12 || pixels[i]==13) {
       int dx,dy;
       for(dy=-1;dy<=1;dy++)for(dx=-1;dx<=1;dx++) {
@@ -152,12 +165,135 @@ static void al_recolor_player_two(void) {
           region[i]=4;
       }
     }
+    /* Work inside the fabric silhouette rather than following warm colors
+     * into the waistband or limbs. The same patch includes cream interior
+     * pixels and a tan rim, which must be classified as a complete shape. */
+    unsigned cloth_top=256,cloth_bottom=0,left[256],right[256];
+    for(i=0;i<256;i++){left[i]=256;right[i]=0;}
+    for(i=0;i<65536;i++)if(region[i]==2 || region[i]==6) {
+      unsigned x=i&255,y=i>>8;
+      if(y<cloth_top)cloth_top=y;if(y>cloth_bottom)cloth_bottom=y;
+      if(x<left[y])left[y]=x;if(x>right[y])right[y]=x;
+    }
+    for(i=0;i<256;i++)if(left[i]<256) {
+      while(left[i] && pixels[i*256+left[i]-1]>=1 && pixels[i*256+left[i]-1]<=4)left[i]--;
+      while(right[i]<255 && pixels[i*256+right[i]+1]>=1 && pixels[i*256+right[i]+1]<=4)right[i]++;
+    }
+    for(i=0;i<65536;i++)if(pixels[i]>=1 && pixels[i]<=4 &&
+        (i&255)>=left[i>>8] && (i&255)<=right[i>>8])region[i]=15;
+    for(i=0;i<65536;i++)if(region[i]==15 && (pixels[i]==3 || pixels[i]==4) &&
+        (i>>8)*2>=cloth_top+cloth_bottom) {
+      unsigned head=0,tail=1,minx=i&255,maxx=minx,miny=i>>8,maxy=miny;
+      queue[0]=i;region[i]=18;
+      while(head<tail) {
+        unsigned pos=queue[head++];int dx,dy,x=pos&255,y=pos>>8;
+        if(x<minx)minx=x;if(x>maxx)maxx=x;if(y<miny)miny=y;if(y>maxy)maxy=y;
+        for(dy=-2;dy<=2;dy++)for(dx=-2;dx<=2;dx++) {
+          unsigned next;
+          if(x+dx<0 || x+dx>255 || y+dy<0 || y+dy>255)continue;
+          next=(y+dy)*256+x+dx;
+          if(region[next]==15 && (pixels[next]==3 || pixels[next]==4) &&
+             (y+dy)*2>=cloth_top+cloth_bottom){region[next]=18;queue[tail++]=next;}
+        }
+      }
+      if(tail>=3 && tail<=40 && maxx-minx<=12 && maxy-miny<=12 && maxx>minx && maxy>miny) {
+        unsigned row;
+        for(row=miny?miny-1:0;row<=maxy+1 && row<256;row++) {
+          unsigned lo=256,hi=0,x;
+          for(j=0;j<tail;j++)if(abs((int)(queue[j]>>8)-(int)row)<=1) {
+            x=queue[j]&255;if(x<lo)lo=x;if(x>hi)hi=x;
+          }
+          if(lo==256)continue;if(lo)lo--;if(hi<255)hi++;
+          for(x=lo;x<=hi;x++) {
+            unsigned pos=row*256+x;
+            if(pixels[pos]>=1 && pixels[pos]<=4 &&
+               (region[pos]==15 || region[pos]==18))region[pos]=10;
+          }
+        }
+      }
+    }
+    /* Purple is shared by vest panels and thin sword edges. Only cloth-sized
+     * regions or regions adjoining the body use the blue vest color. */
+    for(i=0;i<65536;i++)if(pixels[i]==11 && !region[i]) {
+      unsigned head=0,tail=1,broad=0,skin=0,k;
+      queue[0]=i;region[i]=8;
+      while(head<tail) {
+        unsigned pos=queue[head++],neighbors[4]={pos-256,pos+256,pos-1,pos+1};
+        if((pos&255)<255 && pos<65280 && pixels[pos+1]==11 &&
+           pixels[pos+256]==11 && pixels[pos+257]==11)broad=1;
+        for(k=0;k<4;k++) {
+          unsigned next=neighbors[k];
+          if(next>=65536 || (k==2 && !(pos&255)) || (k==3 && (pos&255)==255))continue;
+          if(pixels[next]==3 || pixels[next]==4)skin++;
+          if(pixels[next]==11 && !region[next]){region[next]=8;queue[tail++]=next;}
+        }
+      }
+      for(j=0;j<tail;j++)region[queue[j]]=(broad || (tail>=4 && skin>=3))?7:8;
+    }
+    /* Recover narrow vest panels near established cloth, but do not walk
+     * upward into facial shadows or across silver sword-edge pixels. */
+    {
+      unsigned vest_top=256;
+      for(i=0;i<65536;i++)if(region[i]==7 && (i>>8)<vest_top)vest_top=i>>8;
+      for(i=0;i<65536;i++)if(pixels[i]==11 && region[i]==8 && (i>>8)>=vest_top) {
+        int dx,dy,x=i&255,y=i>>8,metal=0,near=0,skin=0,hair=0;
+        for(dy=-1;dy<=1;dy++)for(dx=-1;dx<=1;dx++)if(x+dx>=0 && x+dx<256 && y+dy>=0 && y+dy<256) {
+          unsigned ink=pixels[(y+dy)*256+x+dx];if(ink==12 || ink==13)metal=1;
+          if(ink>=1 && ink<=7)skin++;if(ink==15)hair++;
+        }
+        if(metal || skin>=5 || hair>=4)continue;
+        for(dy=-2;dy<=2 && !near;dy++)for(dx=-2;dx<=2;dx++)
+          if(x+dx>=0 && x+dx<256 && y+dy>=0 && y+dy<256 && region[(y+dy)*256+x+dx]==7){near=1;break;}
+        if(near)region[i]=16;
+      }
+    }
     for(i=0;i<used*2;i++) {
       unsigned shift=(i&1)?0:4,ink=(tiles[i/2]>>shift)&15,pos=positions[i];
-      unsigned value=(region[pos]==2 || region[pos]==4 || region[pos]==6)?cloth[ink]:(ink==11?13:ink==8?4:ink==3?2:ink==4?3:ink);
+      unsigned x=pos&255,y=pos>>8;
+      unsigned value=(region[pos]==2 || region[pos]==4 || region[pos]==6 || region[pos]==15 || region[pos]==18)?cloth[ink]:(ink==11?((region[pos]==7 || region[pos]==16)?10:11):ink==8?8:ink==3?2:ink==4?3:ink);
+      if(region[pos]==10)value=ink; /* Keep the native tan patch. */
+      /* Vertical-rope poses split tiny cuff/fold highlights from the main
+       * trouser region with the sword and exposed legs. Below the waist,
+       * native cream/white inks are fabric; skin uses 3..7 and steel 12/13. */
+      if(frame>=0x1e6ae6 && frame<=0x1e6d50 && y>=114 &&
+         (ink==1 || ink==2 || ink==14))value=cloth[ink];
+      /* Nine bending/recovering idle poses put the knee fold next to the
+       * patch. Use the native patch outline, not proximity to warm inks:
+       * those inks also draw the adjacent folds and trouser border. */
+      if(frame>=0x1ec8e8 && frame<=0x1ecbac) {
+        static const unsigned char patch_left[4][5]={
+          {127,126,126,126,127}, {126,125,125,126,0},
+          {127,125,125,125,127}, {127,125,125,125,127}};
+        static const unsigned char patch_right[4][5]={
+          {129,130,131,131,130}, {129,130,130,130,0},
+          {128,129,130,130,129}, {128,130,130,130,129}};
+        unsigned layout=frame==0x1ec8e8?0:frame==0x1ec936?1:frame==0x1ecbac?3:2;
+        unsigned top=(layout==0 || layout==1 || layout==3)?130:129;
+        unsigned patch=y>=top && y<top+5 && patch_left[layout][y-top] &&
+          x>=patch_left[layout][y-top] && x<=patch_right[layout][y-top];
+        if(ink>=1 && ink<=4 && patch)value=ink;
+        else if(region[pos]==10 || (ink>=1 && ink<=4 &&
+          x>=121 && x<=130 && y>=129 && y<=137))value=cloth[ink];
+      }
+      /* The Genie shares this composite descriptor with Aladdin. */
+      if(frame==0x1e8034 && (pos&255)>=130 && (pos>>8)<124)value=ink;
+      /* Final teleport frames contain only magic, not trouser fabric. */
+      if(frame>=0x1ed230 && frame<=0x1ed2e4)value=ink;
+      if(props[i/2]==1)value=ink;
+      if(props[i/2]==2 && ink==11)value=10;
+      /* The apple-toss cycle keeps the torso at these coordinates while
+       * repacking it with different head/arm tiles. Its narrow front panel
+       * has no broad purple region for the general classifier to follow.
+       * This material mask excludes the face, hand, apple and sword. */
+      if(frame>=0x1ec27c && frame<=0x1ec6b4 && ink==11 &&
+         ((x>=127 && x<=131 && y>=101 && y<=113) || (x==121 && y==100)))value=10;
+      /* One descending-apple frame packs the apple into an arm/body tile. */
+      if(frame==0x1ec5dc && (pos&255)>=144 && (pos&255)<=148 &&
+         (pos>>8)>=93 && (pos>>8)<=97)value=ink;
+      if(abu)value=(ink>=1 && ink<=6)?ink+1:ink; /* Darker fur; keep eyes and clothing. */
       tiles[i/2]=(tiles[i/2]&~(15<<shift))|(value<<shift);
     }
-    cached_frame=frame;cached_size=bytes;
+    cached_frame=frame;cached_size=bytes;cached_abu=abu;
   }
   for(i=0;i<bytes;i++)if(vram[start+(i^1)]!=tiles[i]) {
     unsigned tile=(start+i)>>5;
@@ -166,6 +302,7 @@ static void al_recolor_player_two(void) {
     bg_name_dirty[tile]=255;
   }
 }
+__declspec(dllexport) void al_probe_recolor(void) {al_recolor_player_two();}
 static void al_capture(al_player *p) {
   unsigned i,j; for(i=0;i<sizeof(al_ranges)/sizeof(al_ranges[0]);i++)
     for(j=0;j<al_ranges[i][1];j++) p->ram[al_ranges[i][0]+j]=al_r8(al_ranges[i][0]+j);
@@ -179,6 +316,14 @@ static void al_install(al_player *p) {
       unsigned a=al_ranges[i][0]+j;
       /* Rooftops flutes unlock shared ropes, regardless of who collected them. */
       if(al_r8(0x7e26)==0 && a>=0xf126 && a<=0xf12a)continue;
+      /* The optional Rooftops flute selects the shared snake's supply route. */
+      if(al_r8(0x7e26)==0 && a==0xf116)continue;
+      /* The palace key removes one shared carpet covering the passage. */
+      if(al_r8(0x7e26)==10 && a==0xf11c)continue;
+      /* Scripted carpets have one shared destination, even when P2 boards. */
+      if(a>=0xf094 && a<=0xf097)continue;
+      /* Rug Ride duck cues belong to the shared obstacle script. */
+      if(al_r8(0x7e26)==8 && a==0xf10b)continue;
       al_w8(a,p->ram[a]);
     }
   al_w16(0x7dfa,al_r16(0x7dfa)+p->camera_x-al_r16(0x7df6));
@@ -295,8 +440,30 @@ static void al_noclip_move(void) {
   if(b&(1<<6))p->ram[0x7e49]=255;if(b&(1<<7))p->ram[0x7e49]=0;
   p->ram[0xf167]=0;
 }
-/* Bytes 0..1 of the snapshot RAM are metadata, outside every installed RAM
- * range. Existing snapshots leave them zero; keep the state layout compatible. */
+/* Snapshot RAM 0..4 and 0200..02FF are metadata, outside installed ranges.
+ * Existing snapshots leave them zero; keep the state layout compatible. */
+/* Native spring animations temporarily disable collision for everybody.
+ * Keep their visual animation shared, but give each player its own refractory
+ * period. Metadata is outside installed RAM and already covered by saves. */
+static unsigned al_spring(unsigned a) {
+  unsigned t=al_r8(a),anim=al_r32(a+0x20);
+  if(t==1 || (t==0x84 && anim>=0x122db2 && anim<0x122dd8))return 1;
+  if(t==0x4e || (t==0x84 && anim>=0x124b1a && anim<0x124b3a))return 0x4e;
+  if(t==0x4f || (t==0x84 && anim>=0x124b3e && anim<0x124b6e))return 0x4f;
+  if(t==0x65 || t==0x66)return 0x65;
+  return 0;
+}
+static unsigned al_spring_cooldown(unsigned a,unsigned set) {
+  unsigned index=(a-0x7e40)/0x42,m=0x200+index*8,t=al_spring(a);
+  al_player *p=&al_players[al_second];
+  if(index>=32 || !t)return 0;
+  if(p->ram[m+5]!=t || al_p16(p,m+1)!=al_r16(a+2) || al_p16(p,m+3)!=al_r16(a+4))p->ram[m]=0;
+  if(set) {
+    p->ram[m]=t==1?24:t==0x4f?36:20;
+    al_pw16(p,m+1,al_r16(a+2));al_pw16(p,m+3,al_r16(a+4));p->ram[m+5]=t;
+  }
+  return p->ram[m];
+}
 static int al_window_hand(unsigned a) {
   unsigned animation=al_r32(a+0x20);
   if((al_r8(a)==0x84 || al_r8(a)==0x0e) && animation>=0x123d34 && animation<0x123de2)return 64;
@@ -304,13 +471,30 @@ static int al_window_hand(unsigned a) {
   if((al_r8(a)==0x84 || al_r8(a)==0x06) && animation>=0x123200 && animation<0x123274)return 48;
   return 0;
 }
+static unsigned al_carpet(unsigned a) {
+  unsigned type=al_r8(a),linked=al_r32(a+0x3e)&65535;
+  if(type==0x5e || type==0x60 || type==0x61)return a;
+  if(type==0x84 && linked>=0x7e82 && linked<AL_CARPET_SLOT &&
+     (linked-0x7e40)%0x42==0 && al_r32(linked+0x3e)==0xff0000+a &&
+     (al_r8(linked)==0x5e || al_r8(linked)==0x60 || al_r8(linked)==0x61))return linked;
+  return 0;
+}
 static int al_targeted_object(unsigned a) {
-  return al_r8(a) && (al_r8(a)<0x7f || al_window_hand(a));
+  return al_r8(a) && (al_r8(a)<0x7f || al_window_hand(a) || al_carpet(a));
 }
 static int al_enemy_targets_two(unsigned a) {
   int x=al_r16(a+2),y=al_r16(a+4),d0,d1;
   if(!al_players[1].ram[0xeffa])return 0;
   if(!al_players[0].ram[0xeffa])return 1;
+  if(al_carpet(a)) {
+    unsigned carpet=al_carpet(a),p;
+    for(p=0;p<2;p++) {
+      unsigned riding=al_players[p].ram[0xf0d3];
+      if(al_players[p].ram[0xeffa] && (riding==0x5e || riding==0x60 || riding==0x61) &&
+         abs((int)al_p16(&al_players[p],0x7e42)-(int)al_r16(carpet+2))<48 &&
+         abs((int)al_p16(&al_players[p],0x7e44)-(int)al_r16(carpet+4))<48)return p;
+    }
+  }
   /* Native window triggers use a horizontal band. Prefer either live
    * player inside that band, even if the other is closer on a different floor. */
   if(al_window_hand(a)) {
@@ -410,6 +594,8 @@ __declspec(dllexport) int al_coop_restore(const void *data, unsigned size) {
       al_w8(a,al_r8(a)|al_players[0].ram[a]|al_players[1].ram[a]);
   }
   al_reclaim_iago_tiles();
+  if(al_ready && al_r8(0x7e26)==10)
+    al_w8(0xf11c,al_r8(0xf11c)|al_players[0].ram[0xf11c]|al_players[1].ram[0xf11c]);
   return 1;
 }
 /* The native game only tests flute-dependent rope spawns on a newly streamed
@@ -442,6 +628,14 @@ static int al_rooftop_rope(void) {
 static void al_coop_hook(void) {
   unsigned pc=m68k.pc,i;
   if(!al_enabled) return;
+  /* The Genie slot machine polls controller port 1 directly, outside the
+   * gameplay input routine. Combine either player's A/B/C at those reads. */
+  if(pc==0x1b190e) {
+    unsigned b=al_buttons[0]|al_buttons[1];
+    if(b&(1<<0))m68k.dar[0]&=~16u;
+    if(b&(1<<8))m68k.dar[0]&=~32u;
+  }
+  if(pc==0x1b1954 && ((al_buttons[0]|al_buttons[1])&(1<<1)))m68k.dar[0]&=~16u;
   /* Extend the original title-screen Options list. The extra row sits above
    * Difficulty, so Up from Difficulty reaches Death and Down returns to it. */
   if(pc==0x1b409a) {
@@ -472,7 +666,7 @@ static void al_coop_hook(void) {
   }
   if(pc==0x1a8c16 && !al_second) {
     if(!al_ready) {
-      al_capture(&al_players[0]);al_players[0].ram[0]=al_players[0].ram[1]=0; al_players[1]=al_players[0];
+      al_capture(&al_players[0]);memset(al_players[0].ram+0x200,0,288);memset(al_players[0].ram,0,5); al_players[1]=al_players[0];
       unsigned offset=al_restart==2?0:48;
       al_pw16(&al_players[1],0x7dfa,al_p16(&al_players[1],0x7dfa)+offset);
       al_pw16(&al_players[1],0x7e02,al_p16(&al_players[1],0x7e02)+offset);
@@ -493,6 +687,22 @@ static void al_coop_hook(void) {
     al_input(0);
   }
   if(!al_ready) return;
+  /* The native key predicate suppresses this carpet on the next map stream.
+   * With a midpoint camera it can remain loaded after pickup. Retire the
+   * existing instance through the native allocator's cleanup as well. */
+  if(pc==0x1ac7dc && al_r8(0x7e26)==10 && al_r8(0xf11c)) {
+    unsigned a=m68k.dar[9]&65535;
+    if(al_r8(a)==0x5f && al_r8(a+0x34)==0x82) {
+      m68k.dar[15]-=4;al_w32(m68k.dar[15]&65535,0x1ac846);
+      m68k.pc=0x1abe6e;return;
+    }
+  }
+  /* Native DBRA counts 31..0. Render slots 0,31,1..30, including when a
+   * blink/hidden branch skips directly to the native loop epilogue. */
+  if(pc==0x1aba20) {
+    unsigned remaining=m68k.dar[0]&65535;
+    if(remaining<=31)m68k.dar[10]=0xff0000+(remaining==31?0x7e40:remaining==30?AL_SLOT:0x7e40+(30-remaining)*0x42);
+  }
   if(pc==0x1a8c20 && !al_second && al_players[0].ram[1]) {
     al_players[0].ram[1]=0;
     /* Run the original sound-only tail of the token pickup. Its RTS reaches
@@ -508,6 +718,29 @@ static void al_coop_hook(void) {
    * allocation before native 1AE30A clears the ownership pointers. */
   if((pc==0x1b6302 || pc==0x1b632a) && al_r8(0x7e26)==12)
     al_release_sprite_tiles(0x7e82);
+  /* Coal flames arm after a delay. Keep each player's delayed flame personal,
+   * otherwise the trailing runner is burned by the leading runner's flame.
+   * Snapshot metadata 0300..031F survives saves without changing their size. */
+  if(pc==0x1b5332) {
+    unsigned a,owner=1+(al_second || al_enemy_second);
+    for(a=0x7e82;a<AL_SLOT;a+=0x42)if(al_r8(a)==0x8c) {
+      unsigned pending=al_players[0].ram[0x300+(a-0x7e40)/0x42];
+      if(!pending || pending==owner){m68k.pc=0x1b536a;return;}
+    }
+    m68k.pc=0x1b533e;return;
+  }
+  if(pc==0x1ae30a || pc==0x1b535a) {
+    unsigned a=m68k.dar[13]&65535;
+    if(a>=0x7e40 && a<=AL_SLOT && (a-0x7e40)%0x42==0)
+      al_players[0].ram[0x300+(a-0x7e40)/0x42]=pc==0x1b535a?1+(al_second || al_enemy_second):0;
+  }
+  if(pc==0x1ae9d4) {
+    unsigned a=m68k.dar[9]&65535;
+    if(a>=0x7e82 && a<AL_SLOT && (a-0x7e40)%0x42==0 && al_r8(a)==0x7b) {
+      unsigned owner=al_players[0].ram[0x300+(a-0x7e40)/0x42];
+      if(owner && owner!=1+(al_second || al_enemy_second)){m68k.pc=0x1ae9d8;return;}
+    }
+  }
   /* Debug protection must not pin the native hurt-blink on its invisible frame. */
   if(pc==0x1aba14 && (al_debug_flags&5)){m68k.pc=0x1aba20;return;}
   if(al_r8(0x7e26)==8 && !(al_debug_flags&4)) {
@@ -574,6 +807,19 @@ static void al_coop_hook(void) {
    * never the primary player. A second pass doubles falling acceleration and
    * can resolve a barrel/stone bounce twice. Player collisions still run for
    * both players in the following 1ABB40 call. */
+  if(pc==0x1abbe6 && al_r8(m68k.dar[9]&65535)==0x84 && al_spring(m68k.dar[9]&65535)) {
+    m68k.pc=0x1abbee;return;
+  }
+  if(pc==0x1abc96) {
+    unsigned t=al_spring(m68k.dar[9]&65535);
+    if(t){m68k.dar[1]=t;al_w8(0xf0f6,t);}
+  }
+  if(pc==0x1abc9e && al_spring_cooldown(m68k.dar[9]&65535,0)) {
+    m68k.pc=0x1abca0;return;
+  }
+  if(pc==0x1afc04 && !al_spring_cooldown(m68k.dar[9]&65535,0)) {m68k.pc=0x1afc0a;return;}
+  if(pc==0x1afc22 || pc==0x1afc7a || pc==0x1afcf2 || pc==0x1afdbc)
+    al_spring_cooldown(m68k.dar[9]&65535,1);
   if(pc==0x1adb5c && al_second) {al_return();return;}
   if(pc==0x1ade5e) {
     if(al_second) m68k.dar[4]=0; /* Only advance this player's object in second pass. */
@@ -594,6 +840,23 @@ static void al_coop_hook(void) {
     int other_x=(int)al_p16(&al_players[1-al_second],0x7e42)-(int)al_r16(0x7df6);
     int other_y=(int)al_p16(&al_players[1-al_second],0x7e44)-(int)al_r16(0x7df8);
     int sx=al_r16(0x7dfa);
+    unsigned live=al_r8(0xeffa) && !al_r8(0xf0e6) && al_r8(0x7e40);
+    al_player *other=&al_players[1-al_second];
+    unsigned other_live=other->ram[0xeffa] && !other->ram[0xf0e6] && other->ram[0x7e40];
+    if(!live || !other_live) {
+      if(al_second){al_return();return;}
+      /* Native scrolling follows the survivor, with no separation limits
+       * against the falling body. Preserve P1's real position afterwards. */
+      al_camera_real_x=al_camera_real_y=0;
+      if(!live && other_live) {
+        al_camera_real_x=(int)al_r16(0x7dfa)-other_x;
+        al_camera_real_y=(int)al_r16(0x7dfc)-other_y;
+        al_w16(0x7dfa,other_x);al_w16(0x7dfc,other_y);
+      }
+      if(!live && !other_live){al_return();return;}
+      al_w16(0x7dfe,160);
+      return;
+    }
     /* The original exit begins at screen X=300 once the camera reaches the
      * right map boundary. Keep both visible while allowing that final approach. */
     int right_limit=al_r16(0x7df6)>=(int)al_r16(0x7db8)-360?304:280;
@@ -601,11 +864,24 @@ static void al_coop_hook(void) {
     if(sx<other_x-240) sx=other_x-240;
     if(sx<32) sx=32; if(sx>right_limit) sx=right_limit;
     al_w16(0x7dfa,sx);
-    if((int)al_r16(0x7dfc)<other_y-120 && (short)al_r16(0x7e5a)<=0) {
-      al_w16(0x7dfc,other_y-120);al_w16(0x7e5a,0);
-      if(al_r8(0xf0be)) al_w8(0xf0c0,255); /* End ascent; let gravity take over. */
+    /* Only limit an airborne ascent. A grounded player's zero velocity used
+     * to satisfy this condition: a partner descending a slope then pushed
+     * the stationary player downward through the floor to enforce separation. */
+    if((int)al_r16(0x7dfc)<other_y-120 && (short)al_r16(0x7e5a)<0 &&
+       al_r8(0xf0be) && !al_r8(0xf0c0)) {
+      int previous_y=(int)al_p16(&al_players[al_second],0x7e44)-(int)al_r16(0x7df8);
+      int limit=other_y-120;
+      if(limit>previous_y)limit=previous_y; /* Never snap down through a ledge. */
+      if((int)al_r16(0x7dfc)<limit)al_w16(0x7dfc,limit);
+      al_w16(0x7e5a,0);al_w8(0xf0c0,255); /* End ascent; let gravity take over. */
     }
     if(al_second) {al_return();return;}
+    /* A settled look-up pose from either player can request upward scrolling.
+     * Save P1's own target so releasing P2 Up does not latch it permanently. */
+    al_pw16(&al_players[0],2,al_r16(0x7e00));al_players[0].ram[4]=1;
+    if(al_players[1].ram[0xf0df] && al_players[1].ram[0xeffa] &&
+       al_p16(&al_players[1],0x7e00)>al_r16(0x7e00))
+      al_w16(0x7e00,al_p16(&al_players[1],0x7e00));
     al_camera_real_x=al_r16(0x7dfa);al_camera_real_y=al_r16(0x7dfc);
     al_w16(0x7dfa,(al_camera_real_x+al_p16(&al_players[1],0x7e42)-(int)al_r16(0x7df6))/2);
     al_w16(0x7dfc,(al_camera_real_y+al_p16(&al_players[1],0x7e44)-(int)al_r16(0x7df8))/2);
@@ -618,6 +894,7 @@ static void al_coop_hook(void) {
     al_w16(0x7dfe,160);
   }
   if(pc==0x1a8ca2 && !al_second) {
+    if(al_players[0].ram[4]){al_w16(0x7e00,al_p16(&al_players[0],2));al_players[0].ram[4]=0;}
     al_w16(0x7dfa,al_r16(0x7dfa)+al_camera_real_x);
     al_w16(0x7dfc,al_r16(0x7dfc)+al_camera_real_y);
   }
@@ -675,6 +952,7 @@ static void al_coop_hook(void) {
        * resolving death. Timers belong to players and survive mid-death saves. */
       for(i=0;i<2;i++) {
         al_player *p=&al_players[i];
+        unsigned j;for(j=0;j<32;j++)if(p->ram[0x200+j*8])p->ram[0x200+j*8]--;
         if(p->ram[0xeffa])p->ram[0]=0;
         else if(p->ram[0]<60)p->ram[0]++;
       }
@@ -707,6 +985,14 @@ static void al_coop_hook(void) {
   /* Keep a defeated character in the native hit sequence, then its final
    * stagger pose, instead of returning to the living idle animation. Water
    * deaths remove the object and use their own independently animated splash. */
+  if(pc==0x1ac7dc && (m68k.dar[9]&65535)==AL_SLOT && al_r8(0x7e26)==8) {
+    unsigned animation=al_r32(AL_SLOT+0x20);
+    /* The second carpet's landing collision can select the free-ride loop,
+     * which lacks the scripted duck branch used by this stage. */
+    if(animation>=0x122336 && animation<0x122350) {
+      al_w32(AL_SLOT+0x20,0x122350);al_w8(AL_SLOT+0x37,0);
+    }
+  }
   if(pc==0x1ac7dc) {
     unsigned a=m68k.dar[9]&65535,who=a==AL_SLOT?1:0;
     al_player *p=&al_players[who];
@@ -720,6 +1006,9 @@ static void al_coop_hook(void) {
   }
   if(pc==0x1aba20) {
     unsigned a=m68k.dar[10]&65535,who=a==AL_SLOT?1:0;
+    if(a==AL_SLOT && !(al_debug_flags&5) && (al_players[1].ram[0xf0f2]&1)) {
+      m68k.pc=0x1abb20;return;
+    }
     if((a==0x7e40 || a==AL_SLOT) && !al_players[who].ram[0xeffa] && al_players[who].ram[0]>=40) {
       m68k.pc=0x1abb20;return;
     }

@@ -4,8 +4,8 @@ Two-player co-op for the USA Genesis version of Aladdin, using a custom emulator
 core. Boots from the beginning, including the original title screen, Options,
 story and campaign. See Building below for setup; no game ROM is included.
 All 13 stage records are enabled: the main stages, Iago and Jafar encounters,
-and both Abu bonus rooms. P1 wears purple and white; P2 wears a black vest,
-brown trousers, a lighter brown sash, and a lighter, warm skin tone.
+and both Abu bonus rooms. P1 wears purple and white; P2 wears a darker blue vest,
+red trousers with the original tan patch, a brown sash, and a lighter, warm skin tone.
 
 This is an **experimental emulator-assisted build**. The player-supplied USA ROM is
 unchanged. The emulator runs the original player routines with separate player
@@ -36,7 +36,8 @@ no quicksave. Use the debug stage selector to restart a particular stage.
 - Independent movement, attacks, apples, and health; shared enemies and pickups.
   Enemy movement and attack animation callbacks target the nearest living player.
 - Two native lamp health meters and one shared native lives counter; score is hidden.
-- Midpoint camera and separation limits on normal platform stages.
+- Midpoint camera and separation limits on normal platform stages; dead players
+  do not constrain the survivor or camera.
 - Rejoin moves the requesting player to a living, grounded partner while
   preserving health. Successful rejoins and partner revives use the Genie/Abu
   pickup sparkles and sound; leaving noclip uses them too. On Rug Ride, rescue
@@ -54,8 +55,12 @@ no quicksave. Use the debug stage selector to restart a particular stage.
 - Agrabah's exit waits for both players to enter the native exit region. Later
   native exit requests wait for the players to be within 128 pixels on each axis.
   Original exit delays are retained for scripted animations.
+- Trampolines have independent player cooldowns. Either player can stop the Genie
+  slot machine with sword, apple, or jump. P2 blinks after damage and appears ahead
+  of world sprites like P1; P2 Abu has darker fur in bonus rooms.
 - Rug Ride uses two carpets with independent Up/Down steering. The shared camera
-  and obstacle sequence advance only once. Forward progression is automatic.
+  and obstacle sequence advance only once. Both riders use the scripted duck
+  animation. Forward progression is automatic.
 
 ## Debug pause menu
 
@@ -117,6 +122,11 @@ mapping controllers. Runtime does not require a first-level save state.
 For standalone play, put your supported ROM in the project root with the exact
 filename `Aladdin_(U)_[!].bin`, then run `Aladdin-Coop.exe` from that directory.
 
+Recent co-op fixes include independent horizontal-rope animation, P2 look-up
+scrolling, the optional Rooftops flute, the palace key passage, and scripted
+carpets boarding correctly for either player. Older palace saves with the key
+collected by P2 recover the blocked passage when loaded.
+
 ## Development tests
 
 Python checks require Python 3, `ctypes`, and Pillow (`pip install Pillow`).
@@ -133,6 +143,10 @@ With local fixtures available, key checks include `tools/verify_campaign.py`,
 `tools/verify_enemy_death.py`, `tools/verify_window_hands.py`, and
 `tools/verify_object_physics.py`. Test output is written locally to `diagnostics/`;
 create that directory before running the checks.
+
+Sprite audits: `tools/audit_sprite_art.py` generates native/P2 contact sheets
+and checks recolor memory boundaries; `tools/verify_world_sprite_tiles.py`
+compares sampled native sprite uploads across all stages.
 
 Core implementation: `engine/core/m68k/aladdin_coop.h`; frontends: `launcher.cpp`
 and `bizhawk/aladdin_libretro.cpp`; shared menu: `debug_menu.h`.

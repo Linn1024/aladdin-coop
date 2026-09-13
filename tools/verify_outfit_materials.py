@@ -16,8 +16,8 @@ def check():
    for shift in (0,4):
     ink=original>>shift&15
     if ink in (3,4,11):
-     expected={3:2,4:3,11:13}[ink]
-     assert actual>>shift&15==expected,(hex(frame),hex(source+i),ink,actual>>shift&15)
+     expected={3:(2,3,7),4:(3,4,7),11:(10,11)}[ink]
+     assert actual>>shift&15 in expected,(hex(frame),hex(source+i),ink,actual>>shift&15)
      checked+=1
   offset+=size
 
@@ -33,7 +33,7 @@ for n in range(180):
 restore(((ROOT/'diagnostics/appearance-rope.core').read_bytes(),(ROOT/'diagnostics/appearance-rope.extra').read_bytes()))
 for n in range(60):checked_step(one=1<<4,two=1<<4)
 assert len(frames)>20 and checked>10000,(len(frames),checked)
-print('PASS:',len(frames),'animation frames,',checked,'skin/vest pixels; knee skin uses the same ramp as face/arms')
+print('PASS:',len(frames),'animation frames,',checked,'material pixels; native tan trouser patches retained')
 
 # Walking frame 1EA3C2 had isolated white knee/cuff fragments below the sword.
 # These native VRAM pixel offsets are the previously missed fabric, not skin.
@@ -43,6 +43,6 @@ start=int.from_bytes(r[0x866c:0x8670],'big');v=c.al_probe_vram()
 fold_pixels=[(402,0),(402,4),(406,0),(406,4),(407,0),(410,0),(410,4),
  (411,0),(414,0),(414,4),(423,4),(424,0),(465,4),(469,0),(469,4),
  (473,0),(473,4),(492,0),(497,0)]
-assert all((v[start+i]>>shift&15)==5 for i,shift in fold_pixels)
+assert all((v[start+i]>>shift&15)==8 for i,shift in fold_pixels)
 assert any((v[start+i]>>shift&15)==14 for i in range((r[0x8667]+1)*128) for shift in (0,4)), 'Sword highlights were lost'
-print('PASS: reported walking-frame fragments are brown; silver highlights remain')
+print('PASS: reported walking-frame fragments are red; silver highlights remain')
