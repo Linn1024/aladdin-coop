@@ -3,7 +3,7 @@
 This adapter has been tested with Windows x64 BizHawk 2.4. Other versions have
 not been verified. A stock Genesis core runs the original single-player game.
 
-1. Build and install using the command in the [project README](../README.md).
+1. Build and install using the command in the [developer guide](../DEVELOPMENT.md).
 2. Start BizHawk and select File > Open Advanced > Libretro.
 3. Select `Libretro/Cores/AladdinCoop/aladdin_coop_libretro.dll` as the core,
    and your supported Aladdin USA ROM as the content.
