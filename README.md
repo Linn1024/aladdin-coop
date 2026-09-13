@@ -2,19 +2,15 @@
 
 Explore Agrabah with a friend! Play Aladdin's adventure together, from the opening level to the final showdown.
 
+## Watch the gameplay
+
+[Aladdin on Sega Genesis... Now With 2 Players!](https://youtu.be/08rOHvWDWrc)
+
 ## Screenshots
 
-### Agrabah
+<img src="docs/screenshots/agrabah.png" alt="P2 swinging above P1 while exploring Agrabah together" width="640">
 
-<img src="docs/screenshots/agrabah.png" alt="Both Aladdins exploring Agrabah, each with a separate lamp health bar" width="640">
-
-### Inside the Lamp
-
-<img src="docs/screenshots/inside-the-lamp.png" alt="The two players running together through the Genie's colorful world" width="640">
-
-### Sultan's Palace
-
-<img src="docs/screenshots/sultans-palace.png" alt="Both players exploring the Sultan's Palace" width="640">
+<img src="docs/screenshots/rope-climbing.png" alt="Both Aladdins climbing separate ropes in Agrabah" width="640">
 
 ## Play together
 
