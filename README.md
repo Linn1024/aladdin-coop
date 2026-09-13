@@ -43,7 +43,7 @@ Either choice costs one shared life. If both players fall, you return to the che
 | Rejoin partner (Genesis X) | X | O | Y |
 | Pause | Enter | Enter | Start |
 
-These are the default standalone controls; in BizHawk, configure both players under **Config ? Controllers**.
+These are the default standalone controls; in BizHawk, configure both players under **Config > Controllers**.
 
 ## Getting started
 
