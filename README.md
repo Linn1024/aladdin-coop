@@ -12,6 +12,8 @@ Explore Agrabah with a friend! Play Aladdin's adventure together, from the openi
 
 <img src="docs/screenshots/rope-climbing.png" alt="Both Aladdins climbing separate ropes in Agrabah" width="640">
 
+<img src="docs/screenshots/dungeon.png" alt="Both Aladdins exploring the dungeon together" width="640">
+
 ## Play together
 
 - Two players, each with their own movement, sword, apples, and health bar.
