@@ -12,6 +12,10 @@ try {
             throw "Missing $command. Install a 64-bit MinGW-w64 toolchain and pass -ToolchainBin its bin directory."
         }
     }
+    $target = & g++ -dumpmachine
+    if ($LASTEXITCODE -or $target -notmatch '^x86_64-') {
+        throw 'A 64-bit MinGW-w64 compiler is required. Pass -ToolchainBin the directory containing x86_64 g++ and mingw32-make.'
+    }
     (Get-Item engine/core/m68k/m68kcpu.c).LastWriteTime = Get-Date
     & mingw32-make -C engine -f Makefile.libretro platform=win HAVE_CHD=0 HAVE_SYS_PARAM=0 GIT_VERSION= -j8 -s
     if ($LASTEXITCODE) { throw 'Core build failed' }

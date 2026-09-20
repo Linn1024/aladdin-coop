@@ -30,6 +30,25 @@ scrolling, the optional Rooftops flute, the palace key passage, and scripted
 carpets boarding correctly for either player. Older palace saves with the key
 collected by P2 recover the blocked passage when loaded.
 
+## Windows installer package
+
+Run `powershell -NoProfile -File .\installer\build-package.ps1 -ToolchainBin 'C:\path\to\mingw64\bin'`
+to rebuild the game and create `dist\Aladdin-Coop-Windows-Setup.zip`.
+Omit `-ToolchainBin` when the tools are on PATH. Distribute this ZIP; users
+extract it and double-click `Install.cmd`. Windows PowerShell 5.1 is sufficient.
+The package includes the standalone game, complete tracked source from the working
+tree, and license notices. ROMs, saves, and untracked local files are excluded.
+Generated packages are not committed to Git.
+
+For automated installation checks, extract the ZIP and run:
+
+```powershell
+powershell -NoProfile -File .\installer\install.ps1 -NonInteractive -NoShortcuts -RomPath 'C:\games\Aladdin.bin' -InstallDirectory 'C:\temp\Aladdin test'
+```
+
+The normal installer creates shortcuts and installs under `%LOCALAPPDATA%\Aladdin Co-op`.
+Close the game before reinstalling. Updates preserve player files.
+
 ## Development tests
 
 Python checks require Python 3, `ctypes`, and Pillow (`pip install Pillow`).

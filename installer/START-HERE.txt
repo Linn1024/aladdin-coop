@@ -1,0 +1,21 @@
+ALADDIN CO-OP - WINDOWS SETUP
+
+1. Extract the entire ZIP (right-click it and choose Extract All).
+2. Double-click Install.cmd.
+3. Select your original, unmodified Aladdin USA ROM.
+4. Open Aladdin Co-op from the desktop or Start menu.
+
+Requires 64-bit Windows and Windows PowerShell 5.1. No administrator access,
+compiler or separate emulator is needed. The game ROM is not included.
+The installer checks your ROM and copies it with the correct filename.
+
+P1: WASD to move, F sword, G apple, Space jump, X rejoin.
+P2: arrow keys to move, J sword, K apple, L jump, O rejoin.
+Enter pauses. Xbox-style controllers are also supported.
+
+The game installs into %LOCALAPPDATA%\Aladdin Co-op. To update, close the
+game and run the new installer. Existing saves are preserved.
+To uninstall, delete that folder and the Aladdin Co-op shortcuts on your
+desktop and in the Start menu. Back up any saves you want to keep first.
+
+The installation includes source.zip and the engine license and notices.
