@@ -47,7 +47,11 @@ These are the default standalone controls; in BizHawk, configure both players un
 
 Play on Windows using the standalone game or BizHawk. You'll need your own USA version of Aladdin; the game ROM isn't included.
 
-For the easy Windows installer, extract `Aladdin-Coop-Windows-Setup.zip`, double-click **Install.cmd**, and select your original Aladdin USA ROM. Setup checks the ROM and creates desktop and Start menu shortcuts. No administrator access or separate emulator is needed. See [installer instructions](installer/START-HERE.txt) for controls, updates, and removal.
+**[Download Aladdin-Coop-Windows-Setup.zip](https://github.com/Linn1024/aladdin-coop/releases/download/v0.1.0/Aladdin-Coop-Windows-Setup.zip)**
+
+Extract the entire ZIP, double-click **Install.cmd**, and select your original Aladdin USA ROM. Setup checks the ROM and creates desktop and Start menu shortcuts. No administrator access or separate emulator is needed. See [installer instructions](installer/START-HERE.txt) for controls, updates, and removal.
+
+Use the download above to install and play. GitHub's **Code > Download ZIP** contains source code, not the built installer. [Release notes and checksum](https://github.com/Linn1024/aladdin-coop/releases/tag/v0.1.0) are also available.
 
 To build the installer ZIP or game yourself, use the [developer guide](DEVELOPMENT.md). For BizHawk, see [setup instructions](bizhawk/README.md).
 
