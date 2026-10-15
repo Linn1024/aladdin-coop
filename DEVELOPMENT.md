@@ -1,5 +1,7 @@
 # Development guide
 
+Shared workflow: [common co-op development guide](../coop-guides/COOP-DEVELOPMENT.md).
+
 ## Building
 
 Requires Windows x64, PowerShell, and a 64-bit MinGW-w64 toolchain providing
