@@ -78,3 +78,19 @@ The exact supported ROM SHA-256 is
 `a3779fc77994780e80d05bb557f800110d0398d34b951baa8c0a14910014ded3`.
 Keep the engine source and its notices when redistributing modified builds;
 see `engine/LICENSE.txt` for its existing terms.
+
+### Portable standalone startup and settings
+
+coop_desktop.h implements the shared ROM picker, Unicode remembered ROM path,
+per-user settings, screen-size/fullscreen menu and settings-folder shortcut.
+The original ROM bytes are validated before remembering a location; cancel
+exits normally and a missing/changed file returns to the picker. Engine loading
+uses the executable's absolute directory, while normal saves/settings use the
+per-user Linn1024Coop folder. Existing standalone saves/controls migrate without
+overwriting files already there. Test mode keeps isolated legacy diagnostics;
+--rom and --settings-dir allow automated checks without changing user settings.
+Keyboard/XInput configuration is available from Settings and F2. The source
+copy of coop_desktop.h matches coop-releases/desktop/coop_desktop.h. Build
+scripts link shell32 and comdlg32. verify_desktop.py in that repository drives
+real picker input, external Unicode paths, relaunch, controls, screen resizing,
+fullscreen and cancellation for all four games using isolated test folders.

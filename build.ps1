@@ -20,7 +20,7 @@ try {
     & mingw32-make -C engine -f Makefile.libretro platform=win HAVE_CHD=0 HAVE_SYS_PARAM=0 GIT_VERSION= -j8 -s
     if ($LASTEXITCODE) { throw 'Core build failed' }
     if (-not $CoreOnly) {
-        & g++ launcher.cpp -o Aladdin-Coop.exe -O2 -std=c++17 -static -mwindows -lwinmm -lgdi32 -luser32 -lbcrypt
+        & g++ launcher.cpp -o Aladdin-Coop.exe -O2 -std=c++17 -static -mwindows -lwinmm -lgdi32 -luser32 -lbcrypt -lshell32 -lcomdlg32
         if ($LASTEXITCODE) { throw 'Launcher build failed; close the standalone game before rebuilding' }
     }
     & g++ bizhawk/aladdin_libretro.cpp -o bizhawk/aladdin_coop_libretro.dll -O2 -std=c++17 -static -shared -lbcrypt -lgdi32
