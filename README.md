@@ -22,6 +22,13 @@ standalone saves/controls are copied there once when upgrading without replacing
 newer user files. If the selected ROM is moved or deleted, choose it again.
 These settings apply to the standalone EXE; BizHawk retains its own settings.
 
+In **Settings > Controls**, **Controller** means an Xbox-compatible game controller.
+Every keyboard/controller binding has a **Clear** button. Save shortcuts can also
+be changed or cleared there: **F5 quicksave**, **F8 quickload**, **F6 next slot**,
+and **F7 previous slot** by default. There are **10 slots (1-10)**; next/previous
+wrap at the ends. The selected slot is remembered. The **Saves** menu selects a
+slot or saves/loads directly, and the controls window has Save now/Load now buttons.
+
 
 Explore Agrabah with a friend! Play Aladdin's adventure together, from the opening level to the final showdown.
 

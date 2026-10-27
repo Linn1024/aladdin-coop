@@ -109,3 +109,19 @@ Core emulation and ROM contents are unchanged.
 Validation: actual-window capture found 2 black frames in 90 with the original
 launcher and 0 in 90 with the buffered renderer. GDI resources stayed stable
 after repeated resizing and fullscreen transitions.
+
+
+## Standalone controls and ten save slots (2026-10-28)
+
+The shared launcher controls use separate aligned Action/Keyboard/Controller
+columns and a Clear button beside every binding. Controller means XInput
+hardware; clearing a directional controller binding also disables that stick
+direction. Clearing or remapping a save shortcut is persisted and overrides
+the previous hardcoded host key. Defaults: F5 quicksave, F8 quickload, F6 next
+slot, F7 previous slot. The Saves menu and controls window provide clickable
+actions. Ten slots are numbered 1-10 with wrapping and a persisted selection.
+Indiana slot 10 retains the legacy slot-0 file path for compatibility.
+Aladdin saves include both the emulator state and its separate co-op extension,
+plus the host pause/debug menu. Splatterhouse retains old slot-1 save loading.
+Actual UI checks cover clearing/persistence, shortcut rebinding, every slot,
+wraparound, independent writes, load/resave, and malformed-save rejection.

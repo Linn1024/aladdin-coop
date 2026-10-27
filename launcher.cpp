@@ -29,6 +29,7 @@ struct Core {
  void (*get_system_av_info)(retro_system_av_info*);
  bool (*unserialize)(const void*,size_t);
  size_t (*serialize_size)();bool (*serialize)(void*,size_t);
+ unsigned (*state_size)();int (*save)(void*,unsigned),(*restore)(const void*,unsigned);
  void (*enable)(unsigned),(*buttons)(unsigned,unsigned),(*status)(unsigned*),(*details)(unsigned*);
 } core;
 std::map<std::string,std::string> options;
@@ -145,7 +146,7 @@ LRESULT CALLBACK windowProc(HWND w,UINT m,WPARAM a,LPARAM b) {
  case WM_KEYDOWN:
   if(a==VK_F2){coopdesktop::openControls();return 0;}
   if(a==VK_ESCAPE){DestroyWindow(w);return 0;}
-  if(!(b&(1L<<30))){if(a==VK_F9){menu.paused=!menu.paused;menu.debug=0;menu.selected=0;menu.waitingRelease=!menu.paused;InvalidateRect(w,nullptr,FALSE);}if(a==VK_F5)restartLevel();}return 0;
+  if(!(b&(1L<<30))){if(a==VK_F9){menu.paused=!menu.paused;menu.debug=0;menu.selected=0;menu.waitingRelease=!menu.paused;InvalidateRect(w,nullptr,FALSE);}}return 0;
  case WM_PAINT:{PAINTSTRUCT ps;HDC dc=BeginPaint(w,&ps);paint(dc);EndPaint(w,&ps);return 0;}
  }return DefWindowProc(w,m,a,b);
 }
@@ -159,6 +160,21 @@ std::vector<unsigned char> readFile(const char *path) {
  FILE*f=fopen(path,"rb");if(!f)return {};fseek(f,0,SEEK_END);long n=ftell(f);rewind(f);
  if(n<=0){fclose(f);return {};}
  std::vector<unsigned char> v(n);bool ok=fread(v.data(),1,v.size(),f)==v.size();fclose(f);return ok?v:std::vector<unsigned char>{};
+}
+bool saveSlot(int slot){
+ CreateDirectoryA("saves",nullptr);std::string path="saves/slot-"+std::to_string(slot)+".alstate",temp=path+".tmp";
+ unsigned n=(unsigned)core.serialize_size(),extra=core.state_size();uint32_t header[]={0x414c4353,1,n,extra,menu.pack()};
+ std::vector<unsigned char> data(sizeof(header)+n+extra);memcpy(data.data(),header,sizeof(header));
+ if(!core.serialize(data.data()+sizeof(header),n)||!core.save(data.data()+sizeof(header)+n,extra))return false;
+ FILE*f=fopen(temp.c_str(),"wb");if(!f)return false;bool ok=fwrite(data.data(),1,data.size(),f)==data.size();if(fclose(f))ok=false;
+ return ok&&MoveFileExA(temp.c_str(),path.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH);
+}
+bool loadSlot(int slot){
+ auto data=readFile(("saves/slot-"+std::to_string(slot)+".alstate").c_str());if(data.size()<20)return false;
+ uint32_t h[5];memcpy(h,data.data(),20);if(h[0]!=0x414c4353||h[1]!=1||h[2]!=core.serialize_size()||h[3]!=core.state_size()||data.size()!=20ull+h[2]+h[3])return false;
+ std::vector<unsigned char> old(h[2]+h[3]);if(!core.serialize(old.data(),h[2])||!core.save(old.data()+h[2],h[3]))return false;
+ if(!core.unserialize(data.data()+20,h[2])||!core.restore(data.data()+20+h[2],h[3])){core.unserialize(old.data(),h[2]);core.restore(old.data()+h[2],h[3]);return false;}
+ menu.unpack(h[4]);paused=false;if(audioDevice)waveOutReset(audioDevice);return true;
 }
 bool correctRom(const std::vector<unsigned char>& rom) {
  if(rom.size()!=2097152)return false;
@@ -188,7 +204,7 @@ int main(int argc,char **argv) {
  LOAD(init);LOAD(run);LOAD(deinit);LOAD(set_environment);LOAD(set_video_refresh);LOAD(set_audio_sample);LOAD(set_audio_sample_batch);LOAD(set_input_poll);LOAD(set_input_state);LOAD(set_controller_port_device);LOAD(load_game);LOAD(get_system_av_info);LOAD(unserialize);LOAD(serialize);LOAD(serialize_size);
 #undef LOAD
 #define LOAD(name) core.name=(decltype(core.name))GetProcAddress(core.dll,"al_coop_" #name);if(!core.name)return fail("Missing co-op export: " #name);
- LOAD(debug);LOAD(debug_flags);LOAD(debug_stage);LOAD(ready);LOAD(enable);LOAD(buttons);LOAD(status);LOAD(details);
+ LOAD(state_size);LOAD(save);LOAD(restore);LOAD(debug);LOAD(debug_flags);LOAD(debug_stage);LOAD(ready);LOAD(enable);LOAD(buttons);LOAD(status);LOAD(details);
 #undef LOAD
  core.set_environment(environment);core.set_video_refresh(video);core.set_audio_sample(audioSample);core.set_audio_sample_batch(audioBatch);core.set_input_poll(inputPoll);core.set_input_state(inputState);core.init();
  retro_game_info game={coopdesktop::romUtf8.c_str(),rom.data(),rom.size(),nullptr};if(!core.load_game(&game))return fail("ROM could not be loaded.");
@@ -200,6 +216,7 @@ int main(int argc,char **argv) {
   {'J','K',0,VK_NUMPAD0,VK_UP,VK_DOWN,VK_LEFT,VK_RIGHT,'L',0,'O',0,0,0,0,0}};
  const unsigned desktopPads[16]={XINPUT_GAMEPAD_X,XINPUT_GAMEPAD_B,0,XINPUT_GAMEPAD_START,1,2,4,8,XINPUT_GAMEPAD_A,0,XINPUT_GAMEPAD_Y,0,0,0,0,0};
  coopdesktop::configure(desktopKeys,desktopPads,{{4,L"Up"},{5,L"Down"},{6,L"Left"},{7,L"Right"},{0,L"Sword"},{1,L"Apple"},{8,L"Jump"},{10,L"Rejoin"},{3,L"Pause"}});
+ coopdesktop::setupSaves(saveSlot,loadSlot);
  if(!testFrames) {
   SetProcessDPIAware();WNDCLASSA wc={};wc.lpfnWndProc=windowProc;wc.hInstance=GetModuleHandle(nullptr);wc.lpszClassName="AladdinCoop";wc.hCursor=LoadCursor(nullptr,IDC_ARROW);RegisterClassA(&wc);
   windowHandle=CreateWindowA(wc.lpszClassName,"Aladdin - Campaign co-op experiment",WS_OVERLAPPEDWINDOW|WS_VISIBLE,CW_USEDEFAULT,CW_USEDEFAULT,1000,850,nullptr,nullptr,wc.hInstance,nullptr);
