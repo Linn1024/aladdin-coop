@@ -107,8 +107,24 @@ bool restartLevel() {
  if(audioDevice)waveOutReset(audioDevice);
  return ok;
 }
-void paint(HDC dc) {
- RECT r;GetClientRect(windowHandle,&r);FillRect(dc,&r,(HBRUSH)GetStockObject(BLACK_BRUSH));
+// Compose the whole client area offscreen, then present it in one blit.
+// Clearing the visible DC before stretching the game exposed a black frame.
+struct WindowBuffer {
+ HDC dc=nullptr;HBITMAP bitmap=nullptr;HGDIOBJ original=nullptr;int width=0,height=0;
+ ~WindowBuffer(){if(bitmap){SelectObject(dc,original);DeleteObject(bitmap);}if(dc)DeleteDC(dc);}
+ bool resize(HDC target,int w,int h){
+  if(w<=0||h<=0)return false;
+  if(bitmap&&w==width&&h==height)return true;
+  if(!dc)dc=CreateCompatibleDC(target);if(!dc)return false;
+  if(bitmap){SelectObject(dc,original);DeleteObject(bitmap);bitmap=nullptr;}
+  bitmap=CreateCompatibleBitmap(target,w,h);if(!bitmap)return false;
+  original=SelectObject(dc,bitmap);width=w;height=h;return true;
+ }
+};
+void paint(HDC target) {
+ RECT r;GetClientRect(windowHandle,&r);
+ static WindowBuffer buffer;if(!buffer.resize(target,r.right,r.bottom))return;
+ HDC dc=buffer.dc;FillRect(dc,&r,(HBRUSH)GetStockObject(BLACK_BRUSH));
  SetBkMode(dc,TRANSPARENT);SetTextColor(dc,RGB(235,235,235));
  double fit=std::min(double(r.right)/width,double(r.bottom)/height);
  int w=int(width*fit),h=int(height*fit);
@@ -119,11 +135,12 @@ void paint(HDC dc) {
   SetStretchBltMode(dc,COLORONCOLOR);
   StretchDIBits(dc,(r.right-w)/2,(r.bottom-h)/2,w,h,0,0,width,height,output.data(),&b,DIB_RGB_COLORS,SRCCOPY);
  }
-
+ BitBlt(target,0,0,r.right,r.bottom,dc,0,0,SRCCOPY);
 }
 LRESULT CALLBACK windowProc(HWND w,UINT m,WPARAM a,LPARAM b) {
  if(coopdesktop::handle(w,m,a,b))return 0;
  switch(m) {
+ case WM_ERASEBKGND:return 1; // paint() presents a complete, already-cleared frame.
  case WM_DESTROY:running=false;return 0;
  case WM_KEYDOWN:
   if(a==VK_F2){coopdesktop::openControls();return 0;}

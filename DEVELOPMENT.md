@@ -94,3 +94,18 @@ copy of coop_desktop.h matches coop-releases/desktop/coop_desktop.h. Build
 scripts link shell32 and comdlg32. verify_desktop.py in that repository drives
 real picker input, external Unicode paths, relaunch, controls, screen resizing,
 fullscreen and cancellation for all four games using isolated test folders.
+
+
+## Portable launcher repaint fix (2026-10-28)
+
+The standalone launcher now composes the entire client area, including black
+letterboxing and the pause/debug overlay, into a reusable compatible bitmap.
+One BitBlt presents the completed frame. Previously FillRect cleared the visible
+window before StretchDIBits drew the game, exposing black during repaint.
+WM_ERASEBKGND is handled because paint supplies the whole background.
+The back buffer is reused at a stable size and replaced safely on resize.
+Core emulation and ROM contents are unchanged.
+
+Validation: actual-window capture found 2 black frames in 90 with the original
+launcher and 0 in 90 with the buffered renderer. GDI resources stayed stable
+after repeated resizing and fullscreen transitions.
